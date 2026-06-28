@@ -58,10 +58,11 @@ function startFirebaseLiveSync() {
     if(!data) return;
     ['ch','dc','rtu','pump'].forEach(function(k) {
       if(data[k]) {
+        var _ef = {ch:expandCH,dc:expandDC,rtu:expandRTU,pump:expandPump}[k];
         Object.keys(data[k]).forEach(function(d) {
           var nd = normalizeDate(d);
           if(nd && data[k][d] && data[k][d].rows) {
-            HIST[k][nd] = data[k][d];
+            HIST[k][nd] = _ef ? expandRows(data[k][d], _ef) : data[k][d];
             HIST[k][nd].date = nd;
           }
         });
@@ -4747,15 +4748,46 @@ function saveToStorage() {
   }
 }
 
+// Expand slim keys back to full field names so all page code works without changes
+function expandCH(r) {
+  return {'Chiller Ckt':r.id||r['Chiller Ckt'],'Status':r.st||r.Status,'Overall Status':r.ov||r['Overall Status'],
+    'Load (IGV %)':r.ld||r['Load (IGV %)'],'Oil Differential Pressure (psid)':r.oil||r['Oil Differential Pressure (psid)'],
+    'Evap ΔT (°F)':r.edt||r['Evap ΔT (°F)'],'Cond Approach Temp  (°F)':r.cap||r['Cond Approach Temp  (°F)'],
+    'Alarm Present':r.alm||r['Alarm Present'],id:r.id,st:r.st,ov:r.ov,ld:r.ld,oil:r.oil,edt:r.edt,cap:r.cap,alm:r.alm};
+}
+function expandDC(r) {
+  return {'Dry Cooler ID':r.id||r['Dry Cooler ID'],'Status':r.st||r.Status,'Overall Status':r.ov||r['Overall Status'],
+    'ΔT (°F)':r.dt||r['ΔT (°F)'],'Glycol Out (°F)':r.go||r['Glycol Out (°F)'],
+    'Vibration (in/sec RMS)':r.vib||r['Vibration (in/sec RMS)'],'Belt Condition':r.blt||r['Belt Condition'],
+    'Alarm Present':r.alm||r['Alarm Present'],id:r.id,st:r.st,ov:r.ov,dt:r.dt,go:r.go,vib:r.vib,blt:r.blt,alm:r.alm};
+}
+function expandRTU(r) {
+  return {'MER-RTU ID':r.id||r['MER-RTU ID'],'Status':r.st||r.Status,'Overall Status':r.ov||r['Overall Status'],
+    'Discharge Temp (°F)':r.dat||r['Discharge Temp (°F)'],'Humidity (%)':r.rh||r['Humidity (%)'],
+    'Filter Status':r.flt||r['Filter Status'],'Alarm Present':r.alm||r['Alarm Present'],
+    id:r.id,st:r.st,ov:r.ov,dat:r.dat,rh:r.rh,flt:r.flt,alm:r.alm};
+}
+function expandPump(r) {
+  return {'Pump ID':r.id||r['Pump ID'],'Pump Type':r.tp||r['Pump Type'],'Status':r.st||r.Status,
+    'Overall Status':r.ov||r['Overall Status'],'Motor Amps':r.ld||r['Motor Amps'],
+    'Flow (GPM)':r.fl||r['Flow (GPM)'],'Differential Pressure (psid)':r.dp||r['Differential Pressure (psid)'],
+    'Alarm Present':r.alm||r['Alarm Present'],id:r.id,tp:r.tp,st:r.st,ov:r.ov,ld:r.ld,fl:r.fl,dp:r.dp,alm:r.alm};
+}
+function expandRows(entry, expandFn) {
+  if(!entry || !entry.rows) return entry;
+  return Object.assign({}, entry, {rows: entry.rows.map(expandFn)});
+}
+
 async function loadFromFirebase() {
   var days = 0;
+  var expandFns = {ch:expandCH, dc:expandDC, rtu:expandRTU, pump:expandPump};
   try {
     // Try latest full-row snapshot first (fastest load)
     var latest = await fbGet(_FB_ROOT + '/latest');
     if(latest) {
       ['ch','dc','rtu','pump'].forEach(function(k) {
         if(latest[k] && latest[k].rows && latest[k].rows.length) {
-          S[k] = latest[k];
+          S[k] = expandRows(latest[k], expandFns[k]);
           if(S[k].date) {
             HIST[k][S[k].date] = S[k];
           }
@@ -4774,7 +4806,7 @@ async function loadFromFirebase() {
             if(!nd) return;
             var entry = hist[k][d];
             if(!entry || !entry.rows) return;
-            HIST[k][nd] = entry;
+            HIST[k][nd] = expandRows(entry, expandFns[k]);
             HIST[k][nd].date = nd;
             if(k==='ch') days++;
           } catch(e2) { console.warn('Skipping corrupt Firebase entry', k, d, e2); }
@@ -4939,9 +4971,13 @@ function pgContacts(){
       {name:'Jared Kohler',         role:'D&C Team',                        phone:'346-274-3484', email:'jkohler@huntongroup.com'},
     ]},
     { label:'HRS Rental', color:'#7c3aed', icon:'🔧', contacts:[
-      {name:'James "Thadd" Henry',  role:'HRS Rental',                      phone:'281-451-4273', email:'jhenry@hrsrental.com'},
-      {name:'Victor Henry',         role:'HRS Rental',                      phone:'713-462-9492', email:'vhenry@hrsrental.com'},
-      {name:'Bentley Herrington',   role:'HRS Rental',                      phone:'281-841-3298', email:'bherrington@hrsrental.com'},
+      {name:'James "Thadd" Henry',  role:'Rental Manager',                  phone:'281-451-4273', email:'jhenry@hrsrental.com'},
+      {name:'Sam Thompson',         role:'Account Manager',                 phone:'832-459-9070', email:'sthompson@hrsrental.com'},
+      {name:'Amanda Stow',          role:'Asset Manager',                   phone:'713-530-2299', email:'astow@hrsrental.com'},
+      {name:'DJ Lang',              role:'Sales Manager',                   phone:'713-252-3116', email:'dlang@hrsrental.com'},
+      {name:'Matthew Carreon',      role:'Site Lead',                       phone:'713-806-6435', email:'mcarreon@hrsrental.com'},
+      {name:'Victor Henry',         role:'Operations Coordinator',          phone:'713-462-9492', email:'vhenry@hrsrental.com'},
+      {name:'Bentley Herrington',   role:'Operations Coordinator',          phone:'281-841-3298', email:'bherrington@hrsrental.com'},
     ]},
     { label:'IREN Operations Team', color:'#0891b2', icon:'⚡', contacts:[
       {name:'Noah Clark',           role:'Sr. Operations Manager',          phone:'973-886-7278', email:'noah.clark@iren.com'},
